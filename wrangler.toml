@@ -1,0 +1,20 @@
+name = "approveit-api"
+main = "src/index.ts"
+compatibility_date = "2026-02-24"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "approveit-db"
+database_id = "replace-with-d1-database-id"
+
+[[kv_namespaces]]
+binding = "USAGE"
+id = "replace-with-kv-namespace-id"
+
+[vars]
+MONDAY_CLIENT_ID = "replace-with-monday-client-id"
+MONDAY_API_VERSION = "2025-04"
+
+# Required secrets (set with Wrangler CLI):
+# wrangler secret put MONDAY_API_TOKEN
+# wrangler secret put MONDAY_SIGNING_SECRET
