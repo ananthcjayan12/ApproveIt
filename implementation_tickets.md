@@ -443,7 +443,7 @@ Scope source: `approveit_prd.md` + `Monday_documentation/documentation.md`
 | AP-002 | Done | Wrangler bindings/vars and secrets setup documented |
 | AP-003 | Done | Added `schema.sql` baseline and D1 local/remote apply instructions |
 | AP-004 | Done | Added shared types, validator service, and `POST /api/approvals` 400 validation handling |
-| AP-005 | Not Started | Create approval endpoint pending |
+| AP-005 | Done | Implemented create endpoint with D1 insert, requested audit event, and duplicate pending guard |
 | AP-006 | Not Started | Transition endpoints pending |
 | AP-007 | Not Started | Query endpoints pending |
 | AP-008 | Not Started | Audit endpoint pending |
