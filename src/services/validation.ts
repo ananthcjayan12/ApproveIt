@@ -1,4 +1,9 @@
-import { APPROVAL_STATUSES, type ApprovalStatus, type CreateApprovalRequest } from '../types';
+import {
+  APPROVAL_STATUSES,
+  type ApprovalStatus,
+  type CreateApprovalRequest,
+  type TransitionApprovalRequest,
+} from '../types';
 
 const MAX_NOTE_LENGTH = 2000;
 
@@ -66,6 +71,55 @@ export function validateCreateApprovalPayload(payload: unknown): {
       approverName: (input.approverName as string).trim(),
       note: typeof input.note === 'string' ? input.note : undefined,
       statusColumnId: (input.statusColumnId as string).trim(),
+    },
+  };
+}
+
+export function validateTransitionApprovalPayload(payload: unknown): {
+  valid: boolean;
+  errors: string[];
+  data?: TransitionApprovalRequest;
+} {
+  const errors: string[] = [];
+
+  if (!payload || typeof payload !== 'object') {
+    return { valid: false, errors: ['Payload must be a JSON object.'] };
+  }
+
+  const input = payload as Record<string, unknown>;
+
+  if (!isPositiveInteger(input.accountId)) {
+    errors.push('accountId must be a positive integer.');
+  }
+
+  if (!isPositiveInteger(input.actorId)) {
+    errors.push('actorId must be a positive integer.');
+  }
+
+  if (typeof input.actorName !== 'string' || !input.actorName.trim()) {
+    errors.push('actorName is required.');
+  }
+
+  if (input.note !== undefined && typeof input.note !== 'string') {
+    errors.push('note must be a string when provided.');
+  }
+
+  if (typeof input.note === 'string' && input.note.length > MAX_NOTE_LENGTH) {
+    errors.push(`note exceeds max length of ${MAX_NOTE_LENGTH}.`);
+  }
+
+  if (errors.length > 0) {
+    return { valid: false, errors };
+  }
+
+  return {
+    valid: true,
+    errors: [],
+    data: {
+      accountId: input.accountId as number,
+      actorId: input.actorId as number,
+      actorName: (input.actorName as string).trim(),
+      note: typeof input.note === 'string' ? input.note : undefined,
     },
   };
 }

@@ -23,6 +23,13 @@ export interface CreateApprovalRequest {
   statusColumnId: string;
 }
 
+export interface TransitionApprovalRequest {
+  accountId: number;
+  actorId: number;
+  actorName: string;
+  note?: string;
+}
+
 export interface ValidationErrorResponse {
   error: {
     code: 'VALIDATION_ERROR';

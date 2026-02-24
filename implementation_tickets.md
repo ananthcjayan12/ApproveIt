@@ -444,13 +444,13 @@ Scope source: `approveit_prd.md` + `Monday_documentation/documentation.md`
 | AP-003 | Done | Added `schema.sql` baseline and D1 local/remote apply instructions |
 | AP-004 | Done | Added shared types, validator service, and `POST /api/approvals` 400 validation handling |
 | AP-005 | Done | Implemented create endpoint with D1 insert, requested audit event, and duplicate pending guard |
-| AP-006 | Not Started | Transition endpoints pending |
-| AP-007 | Not Started | Query endpoints pending |
-| AP-008 | Not Started | Audit endpoint pending |
-| AP-009 | Not Started | monday GraphQL client pending |
-| AP-010 | Not Started | Status mutation helper pending |
-| AP-011 | Not Started | Notification helper pending |
-| AP-012 | Not Started | Side-effect wiring pending |
+| AP-006 | Done | Added approve/reject/changes PATCH endpoints with pending-only transitions and audit events |
+| AP-007 | Done | Added filtered/paginated list endpoint with account isolation and newest-first ordering |
+| AP-008 | Done | Added approval audit timeline endpoint with account-scoped 404 behavior |
+| AP-009 | Done | Added centralized monday GraphQL wrapper with standardized headers, error mapping, and bounded retry |
+| AP-010 | Done | Added `updateMondayStatus()` helper with required approval-to-status label mapping |
+| AP-011 | Done | Added `sendMondayNotification()` helper with action-based templates |
+| AP-012 | Done | Wired create/transition routes to monday status + notifications with retriable failure queue/logging |
 | AP-013 | Not Started | Frontend bootstrap pending |
 | AP-014 | Not Started | Approval panel pending |
 | AP-015 | Not Started | Request modal pending |
