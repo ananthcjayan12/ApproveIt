@@ -451,23 +451,23 @@ Scope source: `approveit_prd.md` + `Monday_documentation/documentation.md`
 | AP-010 | Done | Added `updateMondayStatus()` helper with required approval-to-status label mapping |
 | AP-011 | Done | Added `sendMondayNotification()` helper with action-based templates |
 | AP-012 | Done | Wired create/transition routes to monday status + notifications with retriable failure queue/logging |
-| AP-013 | Not Started | Frontend bootstrap pending |
-| AP-014 | Not Started | Approval panel pending |
-| AP-015 | Not Started | Request modal pending |
-| AP-016 | Not Started | Approval actions pending |
-| AP-017 | Not Started | Audit trail component pending |
-| AP-018 | Not Started | Board dashboard pending |
-| AP-019 | Not Started | My approvals filter pending |
-| AP-020 | Not Started | Board config APIs pending |
-| AP-021 | Not Started | Board config UI pending |
-| AP-022 | Not Started | Integration custom action pending |
-| AP-023 | Not Started | Usage tracking pending |
-| AP-024 | Not Started | Free-tier enforcement pending |
-| AP-025 | Not Started | Auth/signature verification pending |
-| AP-026 | Not Started | Hardening/observability pending |
-| AP-027 | Not Started | Reminder scheduler pending |
-| AP-028 | Not Started | Email action endpoints pending |
-| AP-029 | Not Started | Test suite pending |
+| AP-013 | Done | Added React+Vite frontend scaffold, monday SDK init, typed API client, and item/board routes |
+| AP-014 | Done | Added `ApprovalPanel` with loading/empty/error states and approval metadata rendering |
+| AP-015 | Done | Added `RequestModal` with approver/details form validation and create request submission |
+| AP-016 | Done | Added `ApprovalActions` with Approve/Reject/Request Changes and in-flight disabling |
+| AP-017 | Done | Added `AuditTrail` component and Item View timeline fetch/render wiring |
+| AP-018 | Done | Added Board View dashboard sections for Pending/Recently Approved/Recently Rejected |
+| AP-019 | Done | Added My Approvals filter toggle with pending overdue indicator (`>24h`) |
+| AP-020 | Done | Added board config `GET/PUT` endpoints with D1 upsert and column/reminder validation |
+| AP-021 | Done | Added board settings form in Board View with load/save and inline validation messaging |
+| AP-022 | Done | Added integration custom action endpoint to create approvals with config fallback and actionable errors |
+| AP-023 | Done | Added monthly KV usage tracking helpers and `GET /api/usage/:accountId` response with threshold |
+| AP-024 | Done | Added free-tier limit checks for create/resolve/integration actions with clear block payloads |
+| AP-025 | Done | Added monday signature verification for integration-originating action calls and `401` rejection handling |
+| AP-026 | Done | Added request IDs, KV-backed API rate limiting, and sanitized structured error logging/response handling |
+| AP-027 | Done | Added scheduled reminder sweep (`24h/48h`) with monday notifications and immutable audit events |
+| AP-028 | Done | Added signed short-lived email action token flow with approve/reject/changes endpoints |
+| AP-029 | Done | Added Vitest suite for validation, status mapping, and signed token verification |
 | AP-030 | Not Started | Marketplace assets pending |
 | AP-031 | Not Started | Review checklist pass pending |
 | AP-032 | Not Started | Submission pending |

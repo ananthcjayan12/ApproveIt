@@ -13,7 +13,11 @@ interface CreateNotificationVariables {
   text: string;
 }
 
-export type NotificationTemplate = 'requested' | Exclude<ApprovalStatus, 'pending'>;
+export type NotificationTemplate =
+  | 'requested'
+  | Exclude<ApprovalStatus, 'pending'>
+  | 'reminder_24h'
+  | 'reminder_48h';
 
 const CREATE_NOTIFICATION_MUTATION = `
 mutation CreateNotification($userId: ID!, $targetId: ID!, $text: String!) {
@@ -39,6 +43,14 @@ function buildNotificationMessage(input: {
 
   if (input.template === 'rejected') {
     return `${input.approverName} rejected your request for item ${input.itemId}.`;
+  }
+
+  if (input.template === 'reminder_24h') {
+    return `Reminder: item ${input.itemId} is pending your approval for over 24 hours.`;
+  }
+
+  if (input.template === 'reminder_48h') {
+    return `Reminder: item ${input.itemId} is pending your approval for over 48 hours.`;
   }
 
   return `${input.approverName} requested changes for item ${input.itemId}.`;

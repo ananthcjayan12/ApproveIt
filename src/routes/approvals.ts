@@ -16,6 +16,7 @@ import { updateMondayStatus } from '../services/mondayStatus';
 import { sendMondayNotification } from '../services/mondayNotifications';
 import { MondayApiError } from '../services/mondayClient';
 import { logSideEffectFailure, queueSideEffectFailure } from '../services/sideEffects';
+import { checkFreeTierLimit, incrementResolvedUsage } from '../services/usage';
 
 const approvalsRoutes = new Hono<{ Bindings: Env }>();
 
@@ -192,6 +193,20 @@ async function handleTransition(c: Context<{ Bindings: Env }>, action: Transitio
     );
   }
 
+  const usageLimit = await checkFreeTierLimit(c.env, validatedData.accountId);
+  if (!usageLimit.allowed) {
+    return c.json(
+      {
+        error: {
+          code: 'FREE_TIER_LIMIT_REACHED',
+          message: `Monthly limit reached (${usageLimit.limit}). Upgrade required to continue.`,
+          details: [`current=${usageLimit.count}`],
+        },
+      },
+      403,
+    );
+  }
+
   const result = await transitionApproval(c.env.DB, approvalId, action, validatedData);
 
   if (!result.ok && result.reason === 'not_found') {
@@ -254,6 +269,8 @@ async function handleTransition(c: Context<{ Bindings: Env }>, action: Transitio
     approverName: result.approverName,
     accountId: result.accountId,
   });
+
+  await incrementResolvedUsage(c.env, result.accountId);
 
   return c.json(
     {
@@ -387,6 +404,20 @@ approvalsRoutes.post('/', async (c) => {
         },
       },
       400,
+    );
+  }
+
+  const usageLimit = await checkFreeTierLimit(c.env, validatedData.accountId);
+  if (!usageLimit.allowed) {
+    return c.json(
+      {
+        error: {
+          code: 'FREE_TIER_LIMIT_REACHED',
+          message: `Monthly limit reached (${usageLimit.limit}). Upgrade required to continue.`,
+          details: [`current=${usageLimit.count}`],
+        },
+      },
+      403,
     );
   }
 

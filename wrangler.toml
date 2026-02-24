@@ -15,6 +15,9 @@ id = "replace-with-kv-namespace-id"
 MONDAY_CLIENT_ID = "replace-with-monday-client-id"
 MONDAY_API_VERSION = "2025-04"
 
+[triggers]
+crons = ["0 * * * *"]
+
 # Required secrets (set with Wrangler CLI):
 # wrangler secret put MONDAY_API_TOKEN
 # wrangler secret put MONDAY_SIGNING_SECRET
