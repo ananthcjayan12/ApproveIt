@@ -2,22 +2,78 @@ name = "approveit-api"
 main = "src/index.ts"
 compatibility_date = "2026-02-24"
 
+# ============================================
+# DEVELOPMENT ENVIRONMENT (default - main branch)
+# ============================================
+# Used for: local development, testing with monday.com sandbox
+
 [[d1_databases]]
 binding = "DB"
-database_name = "approveit-db"
-database_id = "replace-with-d1-database-id"
+database_name = "approveit-db-dev"
+database_id = "2b8c025a-9965-4e60-aba0-8204740d13dc"
 
 [[kv_namespaces]]
 binding = "USAGE"
-id = "replace-with-kv-namespace-id"
+id = "1876df17bbf940b4a757736e2ce16e86"
+
+[[kv_namespaces]]
+binding = "APPROVAL_REQUESTS"
+id = "0711cbe0889242d9ba1f6cf8b94df140"
+
+[[kv_namespaces]]
+binding = "REMINDERS"
+id = "4555e5e51ce348ddaeaf32050a9763ba"
 
 [vars]
-MONDAY_CLIENT_ID = "replace-with-monday-client-id"
+MONDAY_CLIENT_ID = "replace-with-dev-monday-client-id"
 MONDAY_API_VERSION = "2025-04"
+ENVIRONMENT = "development"
 
 [triggers]
-crons = ["0 * * * *"]
+crons = ["0 * * * *"]  # Every hour
 
-# Required secrets (set with Wrangler CLI):
-# wrangler secret put MONDAY_API_TOKEN
-# wrangler secret put MONDAY_SIGNING_SECRET
+# ============================================
+# PRODUCTION ENVIRONMENT (prod branch)
+# ============================================
+# Used for: live monday.com marketplace app
+
+[env.production]
+name = "approveit-api-production"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "approveit-db-production"
+database_id = "42b99426-5506-4da5-98ac-c00f390a7359"
+
+[[env.production.kv_namespaces]]
+binding = "USAGE"
+id = "e73ea71b3f29423aab035174dd46aadd"
+
+[[env.production.kv_namespaces]]
+binding = "APPROVAL_REQUESTS"
+id = "aa8d9eea94d049fb8b7d6f57ebcfd725"
+
+[[env.production.kv_namespaces]]
+binding = "REMINDERS"
+id = "8b5f77558adb411d8f6a04ff1900e5f1"
+
+[env.production.vars]
+MONDAY_CLIENT_ID = "replace-with-production-monday-client-id"
+MONDAY_API_VERSION = "2025-04"
+ENVIRONMENT = "production"
+
+[env.production.triggers]
+crons = ["0 * * * *"]  # Every hour
+
+# ============================================
+# SECRETS (set per environment with Wrangler CLI)
+# ============================================
+# Development:
+#   wrangler secret put MONDAY_CLIENT_SECRET
+#   wrangler secret put MONDAY_SIGNING_SECRET
+#   wrangler secret put JWT_SECRET
+#
+# Production:
+#   wrangler secret put MONDAY_CLIENT_SECRET --env production
+#   wrangler secret put MONDAY_SIGNING_SECRET --env production
+#   wrangler secret put JWT_SECRET --env production

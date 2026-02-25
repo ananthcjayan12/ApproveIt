@@ -468,9 +468,9 @@ Scope source: `approveit_prd.md` + `Monday_documentation/documentation.md`
 | AP-027 | Done | Added scheduled reminder sweep (`24h/48h`) with monday notifications and immutable audit events |
 | AP-028 | Done | Added signed short-lived email action token flow with approve/reject/changes endpoints |
 | AP-029 | Done | Added Vitest suite for validation, status mapping, and signed token verification |
-| AP-030 | Not Started | Marketplace assets pending |
-| AP-031 | Not Started | Review checklist pass pending |
-| AP-032 | Not Started | Submission pending |
+| AP-030 | Done | Finalized listing copy + asset specification + draft icon artifact in docs |
+| AP-031 | Done | Finalized review checklist and submission runbook for pre-review verification |
+| AP-032 | In Progress | Submission tracker and handoff prepared; final Developer Center submit is manual/external |
 
 ---
 
