@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Flex, Heading, Text, Loader, Divider, Box } from '@vibe/core';
 import { apiClient, type Approval, type AuditEvent, type CreateApprovalPayload } from '../api/client';
 import { loadMondayContext, type MondayContext } from '../lib/monday';
 import { ApprovalPanel } from '../components/ApprovalPanel';
@@ -94,35 +95,60 @@ export function ItemViewPage() {
     }
   };
 
+  if (isLoading && !context) {
+    return (
+      <Box style={{ padding: 'var(--spacing-xl)' }}>
+        <Flex justify="center" align="center" style={{ minHeight: '200px' }}>
+          <Loader size="medium" />
+        </Flex>
+      </Box>
+    );
+  }
+
   return (
-    <main>
-      <h1>ApproveIt Item View</h1>
-      <p>Item ID: {context?.itemId ?? 'Unavailable'}</p>
-      <p>Board ID: {context?.boardId ?? 'Unavailable'}</p>
-      <ApprovalPanel approval={approval} isLoading={isLoading} error={error} />
-      {context?.accountId && context.boardId && context.itemId && context.user?.id && context.user?.name && !approval && (
-        <RequestModal
-          accountId={context.accountId}
-          boardId={context.boardId}
-          itemId={context.itemId}
-          requesterId={context.user.id}
-          requesterName={context.user.name}
-          isSubmitting={isSubmitting}
-          onSubmit={handleCreateApproval}
-        />
-      )}
-      {approval && context?.accountId && context.user?.id && context.user?.name && (
-        <ApprovalActions
-          approvalId={approval.id}
-          accountId={context.accountId}
-          actorId={context.user.id}
-          actorName={context.user.name}
-          disabled={isSubmitting}
-          currentStatus={approval.status}
-          onAction={handleTransition}
-        />
-      )}
-      <AuditTrail events={auditEvents} isLoading={isLoading} error={auditError} />
-    </main>
+    <Box style={{ padding: 'var(--spacing-large)' }}>
+      <Flex direction="column" gap="large">
+        <Flex direction="column" gap="small">
+          <Heading type="h1" weight="bold">ApproveIt</Heading>
+          <Flex gap="xs" align="center">
+            <Text type="text2" color="secondary">
+              Item {context?.itemId ?? '—'}
+            </Text>
+            <Text type="text2" color="secondary">•</Text>
+            <Text type="text2" color="secondary">
+              Board {context?.boardId ?? '—'}
+            </Text>
+          </Flex>
+        </Flex>
+
+        <ApprovalPanel approval={approval} isLoading={isLoading} error={error} />
+
+        {context?.accountId && context.boardId && context.itemId && context.user?.id && context.user?.name && !approval && (
+          <RequestModal
+            accountId={context.accountId}
+            boardId={context.boardId}
+            itemId={context.itemId}
+            requesterId={context.user.id}
+            requesterName={context.user.name}
+            isSubmitting={isSubmitting}
+            onSubmit={handleCreateApproval}
+          />
+        )}
+
+        {approval && context?.accountId && context.user?.id && context.user?.name && (
+          <ApprovalActions
+            approvalId={approval.id}
+            accountId={context.accountId}
+            actorId={context.user.id}
+            actorName={context.user.name}
+            disabled={isSubmitting}
+            currentStatus={approval.status}
+            onAction={handleTransition}
+          />
+        )}
+
+        <AuditTrail events={auditEvents} isLoading={isLoading} error={auditError} />
+      </Flex>
+    </Box>
   );
 }

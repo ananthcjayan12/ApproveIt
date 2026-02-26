@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Flex, Heading, Text, Loader, Box, Divider, Button, TextField, Toggle, AttentionBox } from '@vibe/core';
 import { apiClient, type Approval } from '../api/client';
 import { loadMondayContext, type MondayContext } from '../lib/monday';
 
@@ -11,6 +12,8 @@ export function BoardViewPage() {
   const [defaultApproverColumn, setDefaultApproverColumn] = useState('person');
   const [reminderHours, setReminderHours] = useState('24');
   const [configMessage, setConfigMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
   const now = Date.now();
 
@@ -37,26 +40,24 @@ export function BoardViewPage() {
       setContext(ctx);
 
       if (!ctx.accountId || !ctx.boardId) {
+        setIsLoading(false);
         return;
       }
 
-      apiClient
-        .listApprovals({ accountId: ctx.accountId, boardId: ctx.boardId })
-        .then((response) => setApprovals(response.data))
-        .catch(() => setError('Unable to load approvals for this board.'));
-
-      apiClient
-        .getBoardConfig(ctx.boardId, ctx.accountId)
-        .then((response) => {
-          if (!response.data) {
-            return;
+      Promise.all([
+        apiClient.listApprovals({ accountId: ctx.accountId, boardId: ctx.boardId }),
+        apiClient.getBoardConfig(ctx.boardId, ctx.accountId),
+      ])
+        .then(([approvalsRes, configRes]) => {
+          setApprovals(approvalsRes.data);
+          if (configRes.data) {
+            setStatusColumnId(configRes.data.statusColumnId ?? 'status');
+            setDefaultApproverColumn(configRes.data.defaultApproverColumn ?? 'person');
+            setReminderHours(String(configRes.data.reminderHours));
           }
-
-          setStatusColumnId(response.data.statusColumnId ?? 'status');
-          setDefaultApproverColumn(response.data.defaultApproverColumn ?? 'person');
-          setReminderHours(String(response.data.reminderHours));
         })
-        .catch(() => setConfigMessage('Unable to load board settings.'));
+        .catch(() => setError('Unable to load approvals for this board.'))
+        .finally(() => setIsLoading(false));
     });
   }, []);
 
@@ -76,6 +77,7 @@ export function BoardViewPage() {
       return;
     }
 
+    setIsSaving(true);
     try {
       await apiClient.saveBoardConfig(context.boardId, {
         accountId: context.accountId,
@@ -87,82 +89,189 @@ export function BoardViewPage() {
       setConfigMessage('Board settings saved.');
     } catch {
       setConfigMessage('Unable to save board settings.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
+  if (isLoading) {
+    return (
+      <Box style={{ padding: 'var(--spacing-xl)' }}>
+        <Flex justify="center" align="center" style={{ minHeight: '200px' }}>
+          <Loader size="medium" />
+        </Flex>
+      </Box>
+    );
+  }
+
+  const myApprovalCount = context?.user?.id
+    ? approvals.filter((approval) => approval.approverId === context.user?.id).length
+    : 0;
+
   return (
-    <main>
-      <h1>ApproveIt Board View</h1>
-      <p>Board ID: {context?.boardId ?? 'Unavailable'}</p>
-      <section>
-        <h2>Board Settings</h2>
-        <label>
-          Status Column ID
-          <input value={statusColumnId} onChange={(event) => setStatusColumnId(event.target.value)} />
-        </label>
-        <label>
-          Default Approver Column
-          <input value={defaultApproverColumn} onChange={(event) => setDefaultApproverColumn(event.target.value)} />
-        </label>
-        <label>
-          Reminder Hours
-          <input value={reminderHours} onChange={(event) => setReminderHours(event.target.value)} />
-        </label>
-        <button type="button" onClick={saveConfig}>
-          Save Board Settings
-        </button>
-        {configMessage && <p>{configMessage}</p>}
-      </section>
-      <label>
-        <input
-          type="checkbox"
-          checked={showMine}
-          onChange={(event) => setShowMine(event.target.checked)}
-        />
-        My Approvals ({context?.user?.id ? approvals.filter((approval) => approval.approverId === context.user?.id).length : 0})
-      </label>
-      {error && <p>{error}</p>}
-      {!error && filteredApprovals.length === 0 && <p>No approvals found for this board.</p>}
-      {filteredApprovals.length > 0 && (
-        <>
-          <section>
-            <h2>Pending</h2>
-            {pending.length === 0 && <p>No pending approvals.</p>}
-            {pending.length > 0 && (
-              <ul>
-                {pending.map((approval) => (
-                  <li key={approval.id}>
-                    item {approval.itemId} · approver: {approval.approverName}
-                    {isOverdue(approval) ? ' · OVERDUE' : ''}
-                  </li>
-                ))}
-              </ul>
+    <Box style={{ padding: 'var(--spacing-large)' }}>
+      <Flex direction="column" gap="large">
+        <Flex direction="column" gap="small">
+          <Heading type="h1" weight="bold">ApproveIt Dashboard</Heading>
+          <Text type="text2" color="secondary">
+            Board {context?.boardId ?? '—'}
+          </Text>
+        </Flex>
+
+        {/* Board Settings */}
+        <Box className="section-card">
+          <Flex direction="column" gap="medium">
+            <Heading type="h2" weight="medium">Board Settings</Heading>
+            <Divider />
+            <Flex direction="column" gap="medium">
+              <TextField
+                title="Status Column ID"
+                value={statusColumnId}
+                onChange={(value) => setStatusColumnId(value)}
+                placeholder="e.g., status"
+                size="medium"
+              />
+              <TextField
+                title="Default Approver Column"
+                value={defaultApproverColumn}
+                onChange={(value) => setDefaultApproverColumn(value)}
+                placeholder="e.g., person"
+                size="medium"
+              />
+              <TextField
+                title="Reminder Hours"
+                value={reminderHours}
+                onChange={(value) => setReminderHours(value)}
+                placeholder="e.g., 24"
+                size="medium"
+              />
+            </Flex>
+            {configMessage && (
+              <AttentionBox
+                type={configMessage.includes('saved') ? 'success' : 'danger'}
+                text={configMessage}
+                compact
+              />
             )}
-          </section>
-          <section>
-            <h2>Recently Approved</h2>
-            {recentApproved.length === 0 && <p>No recent approved approvals.</p>}
-            {recentApproved.length > 0 && (
-              <ul>
-                {recentApproved.map((approval) => (
-                  <li key={approval.id}>item {approval.itemId} · requester: {approval.requesterName}</li>
-                ))}
-              </ul>
-            )}
-          </section>
-          <section>
-            <h2>Recently Rejected</h2>
-            {recentRejected.length === 0 && <p>No recent rejected approvals.</p>}
-            {recentRejected.length > 0 && (
-              <ul>
-                {recentRejected.map((approval) => (
-                  <li key={approval.id}>item {approval.itemId} · requester: {approval.requesterName}</li>
-                ))}
-              </ul>
-            )}
-          </section>
-        </>
-      )}
-    </main>
+            <Button onClick={saveConfig} loading={isSaving} disabled={isSaving}>
+              Save Board Settings
+            </Button>
+          </Flex>
+        </Box>
+
+        {/* Filter Toggle */}
+        <Box className="section-card">
+          <Flex justify="space-between" align="center">
+            <Flex gap="small" align="center">
+              <Toggle
+                isSelected={showMine}
+                onChange={() => setShowMine(!showMine)}
+                aria-label="Show only my approvals"
+              />
+              <Text type="text1">My Approvals</Text>
+            </Flex>
+            <Text type="text2" color="secondary">
+              {myApprovalCount} assigned to you
+            </Text>
+          </Flex>
+        </Box>
+
+        {error && (
+          <AttentionBox type="danger" text={error} />
+        )}
+
+        {!error && filteredApprovals.length === 0 && (
+          <Box className="section-card">
+            <Flex justify="center" align="center" style={{ padding: 'var(--spacing-large)' }}>
+              <Text type="text1" color="secondary">No approvals found for this board.</Text>
+            </Flex>
+          </Box>
+        )}
+
+        {filteredApprovals.length > 0 && (
+          <>
+            {/* Pending Approvals */}
+            <Box className="section-card">
+              <Flex direction="column" gap="medium">
+                <Flex justify="space-between" align="center">
+                  <Heading type="h2" weight="medium">Pending</Heading>
+                  <span className="status-badge status-pending">{pending.length}</span>
+                </Flex>
+                <Divider />
+                {pending.length === 0 ? (
+                  <Text type="text2" color="secondary">No pending approvals.</Text>
+                ) : (
+                  <ul className="approval-list">
+                    {pending.map((approval) => (
+                      <li key={approval.id} className="approval-list-item">
+                        <Flex justify="space-between" align="center">
+                          <Flex direction="column" gap="xs">
+                            <Text type="text1" weight="medium">Item {approval.itemId}</Text>
+                            <Text type="text2" color="secondary">Approver: {approval.approverName}</Text>
+                          </Flex>
+                          {isOverdue(approval) && (
+                            <span className="overdue-indicator">OVERDUE</span>
+                          )}
+                        </Flex>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Flex>
+            </Box>
+
+            {/* Recently Approved */}
+            <Box className="section-card">
+              <Flex direction="column" gap="medium">
+                <Flex justify="space-between" align="center">
+                  <Heading type="h2" weight="medium">Recently Approved</Heading>
+                  <span className="status-badge status-approved">{recentApproved.length}</span>
+                </Flex>
+                <Divider />
+                {recentApproved.length === 0 ? (
+                  <Text type="text2" color="secondary">No recent approved approvals.</Text>
+                ) : (
+                  <ul className="approval-list">
+                    {recentApproved.map((approval) => (
+                      <li key={approval.id} className="approval-list-item">
+                        <Flex direction="column" gap="xs">
+                          <Text type="text1" weight="medium">Item {approval.itemId}</Text>
+                          <Text type="text2" color="secondary">Requester: {approval.requesterName}</Text>
+                        </Flex>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Flex>
+            </Box>
+
+            {/* Recently Rejected */}
+            <Box className="section-card">
+              <Flex direction="column" gap="medium">
+                <Flex justify="space-between" align="center">
+                  <Heading type="h2" weight="medium">Recently Rejected</Heading>
+                  <span className="status-badge status-rejected">{recentRejected.length}</span>
+                </Flex>
+                <Divider />
+                {recentRejected.length === 0 ? (
+                  <Text type="text2" color="secondary">No recent rejected approvals.</Text>
+                ) : (
+                  <ul className="approval-list">
+                    {recentRejected.map((approval) => (
+                      <li key={approval.id} className="approval-list-item">
+                        <Flex direction="column" gap="xs">
+                          <Text type="text1" weight="medium">Item {approval.itemId}</Text>
+                          <Text type="text2" color="secondary">Requester: {approval.requesterName}</Text>
+                        </Flex>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Flex>
+            </Box>
+          </>
+        )}
+      </Flex>
+    </Box>
   );
 }

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Flex, Heading, Text, Button, TextField, TextArea, Box, Divider, AttentionBox } from '@vibe/core';
 import type { CreateApprovalPayload } from '../api/client';
 
 interface RequestModalProps {
@@ -60,28 +61,65 @@ export function RequestModal({
   };
 
   return (
-    <section>
-      <h2>Request Approval</h2>
-      <label>
-        Approver ID
-        <input value={approverId} onChange={(event) => setApproverId(event.target.value)} />
-      </label>
-      <label>
-        Approver Name
-        <input value={approverName} onChange={(event) => setApproverName(event.target.value)} />
-      </label>
-      <label>
-        Status Column ID
-        <input value={statusColumnId} onChange={(event) => setStatusColumnId(event.target.value)} />
-      </label>
-      <label>
-        Note (optional)
-        <textarea value={note} onChange={(event) => setNote(event.target.value)} />
-      </label>
-      {error && <p>{error}</p>}
-      <button type="button" onClick={submit} disabled={isSubmitting}>
-        {isSubmitting ? 'Submitting…' : 'Request Approval'}
-      </button>
-    </section>
+    <Box className="section-card">
+      <Flex direction="column" gap="medium">
+        <Heading type="h2" weight="medium">Request Approval</Heading>
+        
+        <Divider />
+
+        <Flex direction="column" gap="medium">
+          <TextField
+            title="Approver ID"
+            value={approverId}
+            onChange={(value) => setApproverId(value)}
+            placeholder="Enter approver user ID"
+            size="medium"
+            required
+          />
+          <TextField
+            title="Approver Name"
+            value={approverName}
+            onChange={(value) => setApproverName(value)}
+            placeholder="Enter approver name"
+            size="medium"
+            required
+          />
+          <TextField
+            title="Status Column ID"
+            value={statusColumnId}
+            onChange={(value) => setStatusColumnId(value)}
+            placeholder="e.g., status"
+            size="medium"
+            required
+          />
+          <Flex direction="column" gap="xs">
+            <Text type="text2" weight="medium">Note (optional)</Text>
+            <TextArea
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              placeholder="Add context for the approver"
+              size="small"
+              aria-label="Request note"
+            />
+          </Flex>
+        </Flex>
+
+        {error && (
+          <AttentionBox
+            type="danger"
+            text={error}
+            compact
+          />
+        )}
+
+        <Button
+          onClick={submit}
+          disabled={isSubmitting}
+          loading={isSubmitting}
+        >
+          {isSubmitting ? 'Submitting…' : 'Request Approval'}
+        </Button>
+      </Flex>
+    </Box>
   );
 }

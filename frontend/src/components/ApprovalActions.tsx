@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Flex, Heading, Text, Button, TextArea, Box, Divider } from '@vibe/core';
 import type { ApprovalStatus } from '../api/client';
 
 interface ApprovalActionsProps {
@@ -12,10 +13,6 @@ interface ApprovalActionsProps {
 }
 
 export function ApprovalActions({
-  approvalId,
-  accountId,
-  actorId,
-  actorName,
   disabled,
   onAction,
   currentStatus,
@@ -23,26 +20,52 @@ export function ApprovalActions({
   const [note, setNote] = useState('');
 
   if (currentStatus !== 'pending') {
-    return <p>This approval is already closed.</p>;
+    return (
+      <Box className="section-card">
+        <Text type="text1" color="secondary">This approval is already closed.</Text>
+      </Box>
+    );
   }
 
   return (
-    <section>
-      <h2>Approver Actions</h2>
-      <p>Approval: {approvalId}</p>
-      <p>Actor: {actorName} ({actorId}) · Account: {accountId}</p>
-      <textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="Optional note" />
-      <div>
-        <button type="button" disabled={disabled} onClick={() => onAction('approve', note || undefined)}>
-          Approve
-        </button>
-        <button type="button" disabled={disabled} onClick={() => onAction('reject', note || undefined)}>
-          Reject
-        </button>
-        <button type="button" disabled={disabled} onClick={() => onAction('changes', note || undefined)}>
-          Request Changes
-        </button>
-      </div>
-    </section>
+    <Box className="section-card">
+      <Flex direction="column" gap="medium">
+        <Heading type="h2" weight="medium">Take Action</Heading>
+
+        <Divider />
+
+        <TextArea
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          placeholder="Add a note (optional)"
+          size="small"
+          aria-label="Approval note"
+        />
+
+        <Flex gap="small" className="action-buttons">
+          <Button
+            color="positive"
+            disabled={disabled}
+            onClick={() => onAction('approve', note || undefined)}
+          >
+            Approve
+          </Button>
+          <Button
+            color="negative"
+            disabled={disabled}
+            onClick={() => onAction('reject', note || undefined)}
+          >
+            Reject
+          </Button>
+          <Button
+            kind="secondary"
+            disabled={disabled}
+            onClick={() => onAction('changes', note || undefined)}
+          >
+            Request Changes
+          </Button>
+        </Flex>
+      </Flex>
+    </Box>
   );
 }
