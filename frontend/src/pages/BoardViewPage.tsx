@@ -63,6 +63,7 @@ export function BoardViewPage() {
 
   const saveConfig = async () => {
     if (!context?.accountId || !context.boardId) {
+      setConfigMessage('Missing monday context (account or board). Refresh the board and try again.');
       return;
     }
 
