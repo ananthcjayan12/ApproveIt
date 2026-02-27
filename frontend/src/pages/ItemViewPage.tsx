@@ -15,6 +15,8 @@ export function ItemViewPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [auditError, setAuditError] = useState<string | null>(null);
+  const actorId = context?.user?.id;
+  const actorName = context?.user?.name?.trim() || (actorId ? `User ${actorId}` : undefined);
 
   const loadItemApproval = async (ctx: MondayContext) => {
     if (!ctx.accountId || !ctx.itemId) {
@@ -82,7 +84,7 @@ export function ItemViewPage() {
   };
 
   const handleTransition = async (action: 'approve' | 'reject' | 'changes', note?: string) => {
-    if (!context?.accountId || !approval || !context.user?.id || !context.user?.name) {
+    if (!context?.accountId || !approval || !actorId || !actorName) {
       return;
     }
 
@@ -91,8 +93,8 @@ export function ItemViewPage() {
     try {
       await apiClient.transitionApproval(approval.id, action, {
         accountId: context.accountId,
-        actorId: context.user.id,
-        actorName: context.user.name,
+        actorId,
+        actorName,
         note,
       });
 
@@ -139,24 +141,24 @@ export function ItemViewPage() {
 
         <ApprovalPanel approval={approval} isLoading={isLoading} error={error} />
 
-        {context?.accountId && context.boardId && context.itemId && context.user?.id && context.user?.name && !approval && (
+        {context?.accountId && context.boardId && context.itemId && actorId && actorName && !approval && (
           <RequestModal
             accountId={context.accountId}
             boardId={context.boardId}
             itemId={context.itemId}
-            requesterId={context.user.id}
-            requesterName={context.user.name}
+            requesterId={actorId}
+            requesterName={actorName}
             isSubmitting={isSubmitting}
             onSubmit={handleCreateApproval}
           />
         )}
 
-        {approval && context?.accountId && context.user?.id && context.user?.name && (
+        {approval && context?.accountId && actorId && actorName && (
           <ApprovalActions
             approvalId={approval.id}
             accountId={context.accountId}
-            actorId={context.user.id}
-            actorName={context.user.name}
+            actorId={actorId}
+            actorName={actorName}
             disabled={isSubmitting}
             currentStatus={approval.status}
             onAction={handleTransition}
