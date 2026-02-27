@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import type { Env } from './types';
 import approvalsRoutes from './routes/approvals';
 import boardRoutes from './routes/boards';
@@ -10,6 +11,17 @@ import emailActionRoutes from './routes/emailActions';
 const API_RATE_LIMIT_PER_MINUTE = 300;
 
 const app = new Hono<{ Bindings: Env; Variables: { requestId: string } }>();
+
+app.use(
+  '/api/*',
+  cors({
+    origin: '*',
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Authorization', 'x-monday-signature'],
+    exposeHeaders: ['x-request-id'],
+    maxAge: 86400,
+  }),
+);
 
 app.use('*', async (c, next) => {
   const requestId = crypto.randomUUID();

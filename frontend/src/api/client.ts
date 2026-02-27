@@ -56,6 +56,36 @@ export interface BoardConfig {
   createdAt: string;
 }
 
+export class ApiClientError extends Error {
+  method: string;
+  path: string;
+  url: string;
+  status?: number;
+  requestId?: string;
+  responseBody?: unknown;
+
+  constructor(
+    message: string,
+    details: {
+      method: string;
+      path: string;
+      url: string;
+      status?: number;
+      requestId?: string;
+      responseBody?: unknown;
+    },
+  ) {
+    super(message);
+    this.name = 'ApiClientError';
+    this.method = details.method;
+    this.path = details.path;
+    this.url = details.url;
+    this.status = details.status;
+    this.requestId = details.requestId;
+    this.responseBody = details.responseBody;
+  }
+}
+
 function normalizeBaseUrl(url: string): string {
   return url.replace(/\/+$/, '');
 }
@@ -76,17 +106,75 @@ function resolveApiBaseUrl(): string {
 
 const API_BASE_URL = resolveApiBaseUrl();
 
+function parseJsonOrText(input: string): unknown {
+  if (!input) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(input) as unknown;
+  } catch {
+    return input;
+  }
+}
+
+export function formatApiError(error: unknown, fallback: string): string {
+  if (!(error instanceof ApiClientError)) {
+    return fallback;
+  }
+
+  if (error.requestId) {
+    return `${fallback} (Request ID: ${error.requestId})`;
+  }
+
+  return `${fallback} (HTTP ${error.status ?? 'unknown'})`;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-  });
+  const url = `${API_BASE_URL}${path}`;
+  const method = init?.method ?? 'GET';
+  let response: Response;
+
+  try {
+    response = await fetch(url, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init?.headers ?? {}),
+      },
+    });
+  } catch (error) {
+    console.error('[ApproveIt][API] Network error', {
+      method,
+      path,
+      url,
+      error,
+    });
+    throw new ApiClientError('Network error while calling ApproveIt API.', { method, path, url });
+  }
 
   if (!response.ok) {
-    throw new Error(`API request failed with status ${response.status}`);
+    const rawBody = await response.text();
+    const responseBody = parseJsonOrText(rawBody);
+    const requestId = response.headers.get('x-request-id') ?? undefined;
+
+    console.error('[ApproveIt][API] Request failed', {
+      method,
+      path,
+      url,
+      status: response.status,
+      requestId,
+      responseBody,
+    });
+
+    throw new ApiClientError(`API request failed with status ${response.status}`, {
+      method,
+      path,
+      url,
+      status: response.status,
+      requestId,
+      responseBody,
+    });
   }
 
   return (await response.json()) as T;

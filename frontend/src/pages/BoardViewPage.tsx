@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Flex, Heading, Text, Loader, Box, Divider, Button, TextField, Toggle, AttentionBox } from '@vibe/core';
-import { apiClient, type Approval } from '../api/client';
+import { apiClient, formatApiError, type Approval } from '../api/client';
 import { loadMondayContext, type MondayContext } from '../lib/monday';
 
 export function BoardViewPage() {
@@ -56,7 +56,13 @@ export function BoardViewPage() {
             setReminderHours(String(configRes.data.reminderHours));
           }
         })
-        .catch(() => setError('Unable to load approvals for this board.'))
+        .catch((err) => {
+          console.error('[ApproveIt][BoardView] Failed to load board data', {
+            context: ctx,
+            error: err,
+          });
+          setError(formatApiError(err, 'Unable to load approvals for this board.'));
+        })
         .finally(() => setIsLoading(false));
     });
   }, []);
@@ -88,8 +94,19 @@ export function BoardViewPage() {
       });
 
       setConfigMessage('Board settings saved.');
-    } catch {
-      setConfigMessage('Unable to save board settings.');
+    } catch (err) {
+      console.error('[ApproveIt][BoardView] Failed to save board settings', {
+        context,
+        payload: {
+          accountId: context.accountId,
+          boardId: context.boardId,
+          statusColumnId: statusColumnId.trim(),
+          defaultApproverColumn: defaultApproverColumn.trim(),
+          reminderHours: parsedReminderHours,
+        },
+        error: err,
+      });
+      setConfigMessage(formatApiError(err, 'Unable to save board settings.'));
     } finally {
       setIsSaving(false);
     }

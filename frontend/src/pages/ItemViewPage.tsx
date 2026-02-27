@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Flex, Heading, Text, Loader, Divider, Box } from '@vibe/core';
-import { apiClient, type Approval, type AuditEvent, type CreateApprovalPayload } from '../api/client';
+import { apiClient, formatApiError, type Approval, type AuditEvent, type CreateApprovalPayload } from '../api/client';
 import { loadMondayContext, type MondayContext } from '../lib/monday';
 import { ApprovalPanel } from '../components/ApprovalPanel';
 import { RequestModal } from '../components/RequestModal';
@@ -41,8 +41,12 @@ export function ItemViewPage() {
       } else {
         setAuditEvents([]);
       }
-    } catch {
-      setError('Unable to load approvals for this item.');
+    } catch (err) {
+      console.error('[ApproveIt][ItemView] Failed to load item approvals', {
+        context: ctx,
+        error: err,
+      });
+      setError(formatApiError(err, 'Unable to load approvals for this item.'));
       setAuditEvents([]);
     } finally {
       setIsLoading(false);
@@ -65,8 +69,13 @@ export function ItemViewPage() {
       if (context) {
         await loadItemApproval(context);
       }
-    } catch {
-      setError('Unable to create approval request.');
+    } catch (err) {
+      console.error('[ApproveIt][ItemView] Failed to create approval request', {
+        context,
+        payload,
+        error: err,
+      });
+      setError(formatApiError(err, 'Unable to create approval request.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -88,8 +97,15 @@ export function ItemViewPage() {
       });
 
       await loadItemApproval(context);
-    } catch {
-      setError('Unable to update approval status.');
+    } catch (err) {
+      console.error('[ApproveIt][ItemView] Failed to transition approval', {
+        context,
+        approvalId: approval.id,
+        action,
+        note,
+        error: err,
+      });
+      setError(formatApiError(err, 'Unable to update approval status.'));
     } finally {
       setIsSubmitting(false);
     }
