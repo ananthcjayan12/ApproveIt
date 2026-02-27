@@ -25,7 +25,7 @@ binding = "REMINDERS"
 id = "4555e5e51ce348ddaeaf32050a9763ba"
 
 [vars]
-MONDAY_CLIENT_ID = "replace-with-dev-monday-client-id"
+MONDAY_CLIENT_ID = "56d7eeff37552c16de1cd7a7e473d931"
 MONDAY_API_VERSION = "2025-04"
 ENVIRONMENT = "development"
 
@@ -58,7 +58,7 @@ binding = "REMINDERS"
 id = "8b5f77558adb411d8f6a04ff1900e5f1"
 
 [env.production.vars]
-MONDAY_CLIENT_ID = "replace-with-production-monday-client-id"
+MONDAY_CLIENT_ID = "4df5096fd609e738bbdfd7c509de7b62"
 MONDAY_API_VERSION = "2025-04"
 ENVIRONMENT = "production"
 
@@ -69,11 +69,9 @@ crons = ["0 * * * *"]  # Every hour
 # SECRETS (set per environment with Wrangler CLI)
 # ============================================
 # Development:
-#   wrangler secret put MONDAY_CLIENT_SECRET
+#   wrangler secret put MONDAY_API_TOKEN
 #   wrangler secret put MONDAY_SIGNING_SECRET
-#   wrangler secret put JWT_SECRET
 #
 # Production:
-#   wrangler secret put MONDAY_CLIENT_SECRET --env production
+#   wrangler secret put MONDAY_API_TOKEN --env production
 #   wrangler secret put MONDAY_SIGNING_SECRET --env production
-#   wrangler secret put JWT_SECRET --env production

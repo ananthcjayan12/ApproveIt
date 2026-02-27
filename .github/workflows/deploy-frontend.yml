@@ -3,8 +3,7 @@ name: Deploy Frontend to Cloudflare Pages
 on:
   push:
     branches:
-      - main      # dev environment
-      - staging   # staging environment  
+      - main      # development (used as STG)
       - prod      # production environment
   workflow_dispatch:
     inputs:
@@ -14,7 +13,6 @@ on:
         type: choice
         options:
           - development
-          - staging
           - production
 
 env:
@@ -28,7 +26,7 @@ jobs:
       contents: read
       deployments: write
     # Set environment based on branch or manual input
-    environment: ${{ github.event.inputs.environment || (github.ref_name == 'prod' && 'production') || (github.ref_name == 'staging' && 'staging') || 'development' }}
+    environment: ${{ github.event.inputs.environment || (github.ref_name == 'prod' && 'production') || 'development' }}
     
     steps:
       - name: Checkout
@@ -37,7 +35,7 @@ jobs:
       - name: Determine Environment
         id: env
         run: |
-          ENV_NAME="${{ github.event.inputs.environment || (github.ref_name == 'prod' && 'production') || (github.ref_name == 'staging' && 'staging') || 'development' }}"
+          ENV_NAME="${{ github.event.inputs.environment || (github.ref_name == 'prod' && 'production') || 'development' }}"
           echo "name=${ENV_NAME}" >> $GITHUB_OUTPUT
           
           # Set project name with environment suffix
