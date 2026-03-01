@@ -2,6 +2,12 @@ name = "approveit-api"
 main = "src/index.ts"
 compatibility_date = "2026-02-24"
 
+[observability]
+
+[observability.logs]
+enabled = true
+invocation_logs = true
+
 # ============================================
 # DEVELOPMENT ENVIRONMENT (default - main branch)
 # ============================================
