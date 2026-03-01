@@ -68,6 +68,7 @@ function normalizeIntegrationInput(payload: Record<string, unknown>): {
   approverId?: number;
   approverName?: string;
   statusColumnId?: string;
+  triggerStatusColumnId?: string;
   note?: string;
 } {
   const embeddedPayload = asRecord(payload.payload);
@@ -110,6 +111,14 @@ function normalizeIntegrationInput(payload: Record<string, unknown>): {
       parseString(inputRoot.track_column_id),
       parseString(inputRoot.status),
     ),
+    triggerStatusColumnId: firstDefined(
+      parseString(inputRoot.triggerStatusColumnId),
+      parseString(inputRoot.trigger_status_column_id),
+      parseString(inputRoot.triggerColumnId),
+      parseString(inputRoot.trigger_column_id),
+      parseString(inputRoot.sourceStatusColumnId),
+      parseString(inputRoot.source_status_column_id),
+    ),
     note: parseString(inputRoot.note),
   };
 }
@@ -137,11 +146,11 @@ integrationsRoutes.post('/request-approval', async (c) => {
     );
   }
 
-  const rawPayload = await c.req.text();
+  const rawBody = await c.req.text();
 
   const isValidSignature = await verifyMondaySignature({
     secret: c.env.MONDAY_SIGNING_SECRET,
-    payload: rawPayload,
+    payload: rawBody,
     providedSignature: signature,
   });
 
@@ -160,7 +169,7 @@ integrationsRoutes.post('/request-approval', async (c) => {
   let payload: unknown;
 
   try {
-    payload = JSON.parse(rawPayload) as unknown;
+    payload = JSON.parse(rawBody) as unknown;
   } catch {
     return c.json(
       {
@@ -185,7 +194,16 @@ integrationsRoutes.post('/request-approval', async (c) => {
     );
   }
 
-  const input = normalizeIntegrationInput(payload as Record<string, unknown>);
+  const rawPayload = payload as Record<string, unknown>;
+  const input = normalizeIntegrationInput(rawPayload);
+  console.log(
+    JSON.stringify({
+      level: 'info',
+      event: 'integration_request_received',
+      rawKeys: Object.keys(rawPayload),
+      normalizedInput: input,
+    }),
+  );
   const accountId = input.accountId;
   const boardId = input.boardId;
   const itemId = input.itemId;
@@ -297,15 +315,31 @@ integrationsRoutes.post('/request-approval', async (c) => {
 
   const sideEffectFailures: Array<{ operation: string; errorCode: string }> = [];
 
-  try {
-    await updateMondayStatus(c.env, {
-      boardId,
-      itemId,
-      statusColumnId,
-      status: 'pending',
-    });
-  } catch (error) {
-    sideEffectFailures.push({ operation: 'updateMondayStatus', errorCode: getErrorCode(error) });
+  const shouldSkipStatusSync =
+    input.triggerStatusColumnId !== undefined && input.triggerStatusColumnId === statusColumnId;
+
+  if (shouldSkipStatusSync) {
+    console.warn(
+      JSON.stringify({
+        level: 'warn',
+        event: 'integration_status_sync_skipped',
+        reason: 'trigger_and_tracking_columns_match',
+        boardId,
+        itemId,
+        statusColumnId,
+      }),
+    );
+  } else {
+    try {
+      await updateMondayStatus(c.env, {
+        boardId,
+        itemId,
+        statusColumnId,
+        status: 'pending',
+      });
+    } catch (error) {
+      sideEffectFailures.push({ operation: 'updateMondayStatus', errorCode: getErrorCode(error) });
+    }
   }
 
   try {

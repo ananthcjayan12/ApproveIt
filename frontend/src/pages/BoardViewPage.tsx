@@ -192,6 +192,9 @@ export function BoardViewPage() {
               {myApprovalCount} assigned to you
             </Text>
           </Flex>
+          <Text type="text2" color="secondary">
+            Local filter only. This does not enable or disable board automations.
+          </Text>
         </Box>
 
         {error && (
