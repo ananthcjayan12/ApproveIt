@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { createApprovalRequest } from '../services/approvals';
-import { getBoardConfig } from '../services/boardConfigs';
+import { getBoardConfig, getBoardConfigByBoardId } from '../services/boardConfigs';
 import { checkFreeTierLimit } from '../services/usage';
 import { verifyMondaySignature } from '../services/auth';
 import { updateMondayStatus } from '../services/mondayStatus';
@@ -204,26 +204,28 @@ integrationsRoutes.post('/request-approval', async (c) => {
       normalizedInput: input,
     }),
   );
-  const accountId = input.accountId;
   const boardId = input.boardId;
+  const boardConfig = boardId ? await getBoardConfigByBoardId(c.env.DB, boardId) : null;
+  const accountId = input.accountId ?? boardConfig?.accountId;
   const itemId = input.itemId;
-  const requesterId = input.requesterId;
-  const requesterName = input.requesterName ?? '';
+  const requesterId = input.requesterId ?? 0;
+  const requesterName = input.requesterName ?? 'Automation';
 
-  if (!accountId || !boardId || !itemId || !requesterId || !requesterName) {
+  if (!accountId || !boardId || !itemId) {
     console.error(
       JSON.stringify({
         level: 'error',
         event: 'integration_payload_validation_failed',
         reason: 'missing_required_base_fields',
         normalizedInput: input,
+        boardConfig,
       }),
     );
     return c.json(
       {
         error: {
           code: 'VALIDATION_ERROR',
-          message: 'accountId, boardId, itemId, requesterId, requesterName are required.',
+          message: 'accountId, boardId, and itemId are required.',
         },
       },
       400,
@@ -246,7 +248,7 @@ integrationsRoutes.post('/request-approval', async (c) => {
   const approverId = input.approverId;
   const approverName = input.approverName ?? '';
 
-  const config = await getBoardConfig(c.env.DB, boardId, accountId);
+  const config = boardConfig ?? await getBoardConfig(c.env.DB, boardId, accountId);
   const statusColumnId =
     typeof input.statusColumnId === 'string' && input.statusColumnId.trim()
       ? input.statusColumnId.trim()

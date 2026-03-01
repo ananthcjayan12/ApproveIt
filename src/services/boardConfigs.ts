@@ -60,6 +60,20 @@ export async function getBoardConfig(
   return row ? mapBoardConfig(row) : null;
 }
 
+export async function getBoardConfigByBoardId(db: D1Database, boardId: number): Promise<BoardConfig | null> {
+  const row = await db
+    .prepare(
+      `SELECT id, monday_board_id, monday_account_id, status_column_id, default_approver_column, reminder_hours, created_at
+       FROM board_configs
+       WHERE monday_board_id = ?
+       LIMIT 1`,
+    )
+    .bind(boardId)
+    .first<BoardConfigRow>();
+
+  return row ? mapBoardConfig(row) : null;
+}
+
 export async function upsertBoardConfig(db: D1Database, input: UpsertBoardConfigInput): Promise<BoardConfig> {
   const existing = await db
     .prepare(

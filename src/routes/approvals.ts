@@ -125,16 +125,18 @@ async function runTransitionSideEffects(c: Context<{ Bindings: Env }>, input: {
     }
   }
 
-  try {
-    await sendMondayNotification(c.env, {
-      recipientUserId: input.requesterId,
-      targetItemId: input.itemId,
-      template: input.status,
-      requesterName: input.requesterName,
-      approverName: input.approverName,
-    });
-  } catch (error) {
-    sideEffectFailures.push({ operation: 'sendMondayNotification', errorCode: getErrorCode(error) });
+  if (input.requesterId > 0) {
+    try {
+      await sendMondayNotification(c.env, {
+        recipientUserId: input.requesterId,
+        targetItemId: input.itemId,
+        template: input.status,
+        requesterName: input.requesterName,
+        approverName: input.approverName,
+      });
+    } catch (error) {
+      sideEffectFailures.push({ operation: 'sendMondayNotification', errorCode: getErrorCode(error) });
+    }
   }
 
   for (const failure of sideEffectFailures) {
