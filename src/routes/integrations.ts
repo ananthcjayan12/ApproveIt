@@ -47,6 +47,21 @@ function parseEntityId(value: unknown, nestedKeys: string[] = []): number | unde
   );
 }
 
+function parseFirstPositiveIntFromArray(value: unknown): number | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  for (const entry of value) {
+    const parsed = parsePositiveInt(entry);
+    if (parsed) {
+      return parsed;
+    }
+  }
+
+  return undefined;
+}
+
 function parseApprover(value: unknown): { id?: number; name?: string } {
   const record = asRecord(value);
 
@@ -120,6 +135,10 @@ function normalizeIntegrationInput(payload: Record<string, unknown>): {
       parseEntityId(inputRoot.itemId, ['itemId', 'item_id', 'pulseId', 'pulse_id']),
       parseEntityId(inputRoot.item_id, ['itemId', 'item_id', 'pulseId', 'pulse_id']),
       parseEntityId(inputRoot.pulseId, ['itemId', 'item_id', 'pulseId', 'pulse_id']),
+      parseFirstPositiveIntFromArray(inputRoot.itemIds),
+      parseFirstPositiveIntFromArray(inputRoot.item_ids),
+      parseFirstPositiveIntFromArray(inputRoot.pulseIds),
+      parseFirstPositiveIntFromArray(inputRoot.pulse_ids),
     ),
     requesterId: firstDefined(
       parseEntityId(inputRoot.requesterId, ['requesterId', 'requester_id']),
