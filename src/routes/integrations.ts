@@ -211,6 +211,14 @@ function logIntegrationEvent(
   console.log(entry);
 }
 
+function safeParseRawBody(rawBody: string): unknown {
+  try {
+    return JSON.parse(rawBody) as unknown;
+  } catch {
+    return rawBody;
+  }
+}
+
 integrationsRoutes.post('/request-approval', async (c) => {
   const requestId = crypto.randomUUID();
   const signature = c.req.header('x-monday-signature');
@@ -236,6 +244,9 @@ integrationsRoutes.post('/request-approval', async (c) => {
   }
 
   const rawBody = await c.req.text();
+  logIntegrationEvent('info', requestId, 'integration_raw_request_body', {
+    rawBody: safeParseRawBody(rawBody),
+  });
   const jwtClaims = authorizationHeader
     ? await verifyMondayJwt({
         secret: c.env.MONDAY_SIGNING_SECRET,
