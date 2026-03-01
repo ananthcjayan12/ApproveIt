@@ -3,7 +3,7 @@ import type { Env } from '../types';
 import { createApprovalRequest } from '../services/approvals';
 import { getBoardConfig, getBoardConfigByBoardId } from '../services/boardConfigs';
 import { checkFreeTierLimit } from '../services/usage';
-import { verifyMondaySignature } from '../services/auth';
+import { verifyMondayJwt, verifyMondaySignature } from '../services/auth';
 import { updateMondayStatus } from '../services/mondayStatus';
 import { sendMondayNotification } from '../services/mondayNotifications';
 import { MondayApiError } from '../services/mondayClient';
@@ -132,9 +132,10 @@ function getErrorCode(error: unknown): string {
 }
 
 integrationsRoutes.post('/request-approval', async (c) => {
-  const signature = c.req.header('x-monday-signature') ?? c.req.header('authorization');
+  const signature = c.req.header('x-monday-signature');
+  const authorizationHeader = c.req.header('authorization');
 
-  if (!signature) {
+  if (!signature && !authorizationHeader) {
     return c.json(
       {
         error: {
@@ -147,14 +148,21 @@ integrationsRoutes.post('/request-approval', async (c) => {
   }
 
   const rawBody = await c.req.text();
+  const jwtClaims = authorizationHeader
+    ? await verifyMondayJwt({
+        secret: c.env.MONDAY_SIGNING_SECRET,
+        authorizationHeader,
+      })
+    : null;
+  const hasValidHmacSignature = signature
+    ? await verifyMondaySignature({
+        secret: c.env.MONDAY_SIGNING_SECRET,
+        payload: rawBody,
+        providedSignature: signature,
+      })
+    : false;
 
-  const isValidSignature = await verifyMondaySignature({
-    secret: c.env.MONDAY_SIGNING_SECRET,
-    payload: rawBody,
-    providedSignature: signature,
-  });
-
-  if (!isValidSignature) {
+  if (!jwtClaims && !hasValidHmacSignature) {
     return c.json(
       {
         error: {
@@ -200,15 +208,16 @@ integrationsRoutes.post('/request-approval', async (c) => {
     JSON.stringify({
       level: 'info',
       event: 'integration_request_received',
+      authMode: jwtClaims ? 'jwt' : hasValidHmacSignature ? 'hmac' : 'none',
       rawKeys: Object.keys(rawPayload),
       normalizedInput: input,
     }),
   );
   const boardId = input.boardId;
   const boardConfig = boardId ? await getBoardConfigByBoardId(c.env.DB, boardId) : null;
-  const accountId = input.accountId ?? boardConfig?.accountId;
+  const accountId = input.accountId ?? parsePositiveInt(jwtClaims?.accountId) ?? boardConfig?.accountId;
   const itemId = input.itemId;
-  const requesterId = input.requesterId ?? 0;
+  const requesterId = input.requesterId ?? parsePositiveInt(jwtClaims?.userId) ?? 0;
   const requesterName = input.requesterName ?? 'Automation';
 
   if (!accountId || !boardId || !itemId) {
