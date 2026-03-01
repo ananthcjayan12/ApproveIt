@@ -4,6 +4,10 @@ import { createApprovalRequest } from '../services/approvals';
 import { getBoardConfig } from '../services/boardConfigs';
 import { checkFreeTierLimit } from '../services/usage';
 import { verifyMondaySignature } from '../services/auth';
+import { updateMondayStatus } from '../services/mondayStatus';
+import { sendMondayNotification } from '../services/mondayNotifications';
+import { MondayApiError } from '../services/mondayClient';
+import { logSideEffectFailure, queueSideEffectFailure } from '../services/sideEffects';
 
 const integrationsRoutes = new Hono<{ Bindings: Env }>();
 
@@ -14,6 +18,108 @@ function parsePositiveInt(value: unknown): number | undefined {
   }
 
   return parsed;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+}
+
+function firstDefined<T>(...values: Array<T | undefined>): T | undefined {
+  return values.find((value) => value !== undefined);
+}
+
+function parseString(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function parseApprover(value: unknown): { id?: number; name?: string } {
+  const record = asRecord(value);
+
+  const directId = firstDefined(
+    parsePositiveInt(value),
+    parsePositiveInt(record.id),
+    parsePositiveInt(record.userId),
+    parsePositiveInt(record.personId),
+  );
+  const directName = firstDefined(parseString(record.name), parseString(record.text), parseString(record.label));
+
+  if (directId || directName) {
+    return { id: directId, name: directName };
+  }
+
+  const people = Array.isArray(record.personsAndTeams) ? record.personsAndTeams : [];
+  const firstPerson = asRecord(people[0]);
+  return {
+    id: parsePositiveInt(firstPerson.id),
+    name: parseString(firstPerson.name),
+  };
+}
+
+function normalizeIntegrationInput(payload: Record<string, unknown>): {
+  accountId?: number;
+  boardId?: number;
+  itemId?: number;
+  requesterId?: number;
+  requesterName?: string;
+  approverId?: number;
+  approverName?: string;
+  statusColumnId?: string;
+  note?: string;
+} {
+  const embeddedPayload = asRecord(payload.payload);
+  const inbound = asRecord(firstDefined(embeddedPayload.inboundFieldValues, embeddedPayload.inputFields));
+  const inputRoot = Object.keys(inbound).length > 0 ? inbound : payload;
+
+  const approver = parseApprover(
+    firstDefined(inputRoot.approver, inputRoot.approverId, inputRoot.person, inputRoot.people, inputRoot.user),
+  );
+
+  return {
+    accountId: firstDefined(parsePositiveInt(inputRoot.accountId), parsePositiveInt(inputRoot.account_id)),
+    boardId: firstDefined(parsePositiveInt(inputRoot.boardId), parsePositiveInt(inputRoot.board_id)),
+    itemId: firstDefined(
+      parsePositiveInt(inputRoot.itemId),
+      parsePositiveInt(inputRoot.item_id),
+      parsePositiveInt(inputRoot.pulseId),
+    ),
+    requesterId: firstDefined(
+      parsePositiveInt(inputRoot.requesterId),
+      parsePositiveInt(inputRoot.requester_id),
+      parsePositiveInt(inputRoot.userId),
+      parsePositiveInt(inputRoot.triggeredByUserId),
+    ),
+    requesterName: firstDefined(
+      parseString(inputRoot.requesterName),
+      parseString(inputRoot.requester_name),
+      parseString(inputRoot.userName),
+    ),
+    approverId: approver.id,
+    approverName: firstDefined(
+      parseString(inputRoot.approverName),
+      parseString(inputRoot.approver_name),
+      approver.name,
+    ),
+    statusColumnId: firstDefined(
+      parseString(inputRoot.statusColumnId),
+      parseString(inputRoot.status_column_id),
+      parseString(inputRoot.trackStatusColumn),
+      parseString(inputRoot.track_column_id),
+      parseString(inputRoot.status),
+    ),
+    note: parseString(inputRoot.note),
+  };
+}
+
+function getErrorCode(error: unknown): string {
+  if (error instanceof MondayApiError) {
+    return error.code;
+  }
+
+  return 'UNKNOWN_ERROR';
 }
 
 integrationsRoutes.post('/request-approval', async (c) => {
@@ -79,14 +185,22 @@ integrationsRoutes.post('/request-approval', async (c) => {
     );
   }
 
-  const input = payload as Record<string, unknown>;
-  const accountId = parsePositiveInt(input.accountId);
-  const boardId = parsePositiveInt(input.boardId);
-  const itemId = parsePositiveInt(input.itemId);
-  const requesterId = parsePositiveInt(input.requesterId);
-  const requesterName = typeof input.requesterName === 'string' ? input.requesterName.trim() : '';
+  const input = normalizeIntegrationInput(payload as Record<string, unknown>);
+  const accountId = input.accountId;
+  const boardId = input.boardId;
+  const itemId = input.itemId;
+  const requesterId = input.requesterId;
+  const requesterName = input.requesterName ?? '';
 
   if (!accountId || !boardId || !itemId || !requesterId || !requesterName) {
+    console.error(
+      JSON.stringify({
+        level: 'error',
+        event: 'integration_payload_validation_failed',
+        reason: 'missing_required_base_fields',
+        normalizedInput: input,
+      }),
+    );
     return c.json(
       {
         error: {
@@ -111,8 +225,8 @@ integrationsRoutes.post('/request-approval', async (c) => {
     );
   }
 
-  const approverId = parsePositiveInt(input.approverId);
-  const approverName = typeof input.approverName === 'string' ? input.approverName.trim() : '';
+  const approverId = input.approverId;
+  const approverName = input.approverName ?? '';
 
   const config = await getBoardConfig(c.env.DB, boardId, accountId);
   const statusColumnId =
@@ -153,7 +267,7 @@ integrationsRoutes.post('/request-approval', async (c) => {
     approverId,
     approverName,
     statusColumnId,
-    note: typeof input.note === 'string' ? input.note : undefined,
+    note: input.note,
   });
 
   if (!result.ok && result.reason === 'duplicate_pending') {
@@ -179,6 +293,52 @@ integrationsRoutes.post('/request-approval', async (c) => {
       },
       500,
     );
+  }
+
+  const sideEffectFailures: Array<{ operation: string; errorCode: string }> = [];
+
+  try {
+    await updateMondayStatus(c.env, {
+      boardId,
+      itemId,
+      statusColumnId,
+      status: 'pending',
+    });
+  } catch (error) {
+    sideEffectFailures.push({ operation: 'updateMondayStatus', errorCode: getErrorCode(error) });
+  }
+
+  try {
+    await sendMondayNotification(c.env, {
+      recipientUserId: approverId,
+      targetItemId: itemId,
+      template: 'requested',
+      requesterName,
+      approverName,
+    });
+  } catch (error) {
+    sideEffectFailures.push({ operation: 'sendMondayNotification', errorCode: getErrorCode(error) });
+  }
+
+  for (const failure of sideEffectFailures) {
+    logSideEffectFailure({
+      operation: failure.operation,
+      approvalId: result.approvalId,
+      accountId,
+      errorCode: failure.errorCode,
+    });
+
+    await queueSideEffectFailure(c.env, {
+      key: `${failure.operation}:${result.approvalId}`,
+      errorCode: failure.errorCode,
+      payload: {
+        operation: failure.operation,
+        approvalId: result.approvalId,
+        accountId,
+        boardId,
+        itemId,
+      },
+    });
   }
 
   return c.json(
