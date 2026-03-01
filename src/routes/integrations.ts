@@ -6,6 +6,7 @@ import { checkFreeTierLimit } from '../services/usage';
 import { verifyMondayJwt, verifyMondaySignature } from '../services/auth';
 import { updateMondayStatus } from '../services/mondayStatus';
 import { sendMondayNotification } from '../services/mondayNotifications';
+import { getApproverFromPeopleColumn } from '../services/mondayItems';
 import { MondayApiError } from '../services/mondayClient';
 import { logSideEffectFailure, queueSideEffectFailure } from '../services/sideEffects';
 
@@ -68,6 +69,15 @@ function parseApprover(value: unknown): { id?: number; name?: string } {
   };
 }
 
+function parseColumnId(value: unknown): string | undefined {
+  const candidate = parseString(value);
+  if (!candidate) {
+    return undefined;
+  }
+
+  return /^[a-zA-Z0-9_]+$/.test(candidate) ? candidate : undefined;
+}
+
 function normalizeIntegrationInput(payload: Record<string, unknown>): {
   accountId?: number;
   boardId?: number;
@@ -76,17 +86,26 @@ function normalizeIntegrationInput(payload: Record<string, unknown>): {
   requesterName?: string;
   approverId?: number;
   approverName?: string;
+  approverColumnId?: string;
   statusColumnId?: string;
   triggerStatusColumnId?: string;
   note?: string;
 } {
   const embeddedPayload = asRecord(payload.payload);
   const inbound = asRecord(firstDefined(embeddedPayload.inboundFieldValues, embeddedPayload.inputFields));
-  const inputRoot = Object.keys(inbound).length > 0 ? inbound : payload;
+  const inputRoot =
+    Object.keys(inbound).length > 0
+      ? { ...embeddedPayload, ...payload, ...inbound }
+      : { ...embeddedPayload, ...payload };
 
-  const approver = parseApprover(
-    firstDefined(inputRoot.approver, inputRoot.approverId, inputRoot.person, inputRoot.people, inputRoot.user),
+  const approverValue = firstDefined(
+    inputRoot.approver,
+    inputRoot.approverId,
+    inputRoot.person,
+    inputRoot.people,
+    inputRoot.user,
   );
+  const approver = parseApprover(approverValue);
 
   return {
     accountId: firstDefined(
@@ -119,6 +138,7 @@ function normalizeIntegrationInput(payload: Record<string, unknown>): {
       parseString(inputRoot.approver_name),
       approver.name,
     ),
+    approverColumnId: approver.id ? undefined : parseColumnId(approverValue),
     statusColumnId: firstDefined(
       parseString(inputRoot.statusColumnId),
       parseString(inputRoot.status_column_id),
@@ -266,10 +286,14 @@ integrationsRoutes.post('/request-approval', async (c) => {
   }
 
   const rawPayload = payload as Record<string, unknown>;
+  const embeddedPayload = asRecord(rawPayload.payload);
+  const inboundFieldValues = asRecord(firstDefined(embeddedPayload.inboundFieldValues, embeddedPayload.inputFields));
   const input = normalizeIntegrationInput(rawPayload);
   logIntegrationEvent('info', requestId, 'integration_request_received', {
     authMode: jwtClaims ? 'jwt' : hasValidHmacSignature ? 'hmac' : 'none',
     rawKeys: Object.keys(rawPayload),
+    payloadKeys: Object.keys(embeddedPayload),
+    inboundKeys: Object.keys(inboundFieldValues),
     jwtClaimKeys: jwtClaims ? Object.keys(jwtClaims) : [],
     normalizedInput: input,
   });
@@ -317,8 +341,32 @@ integrationsRoutes.post('/request-approval', async (c) => {
     );
   }
 
-  const approverId = input.approverId;
-  const approverName = input.approverName ?? (approverId ? `User ${approverId}` : '');
+  let approverId = input.approverId;
+  let approverName = input.approverName ?? (approverId ? `User ${approverId}` : '');
+
+  if (!approverId && itemId && input.approverColumnId) {
+    try {
+      const resolvedApprover = await getApproverFromPeopleColumn(c.env, {
+        itemId,
+        peopleColumnId: input.approverColumnId,
+      });
+      approverId = resolvedApprover.userId;
+      approverName = resolvedApprover.userName ?? (approverId ? `User ${approverId}` : approverName);
+      logIntegrationEvent('info', requestId, 'integration_approver_resolved_from_column', {
+        itemId,
+        approverColumnId: input.approverColumnId,
+        approverId,
+        approverName,
+      });
+    } catch (error) {
+      logIntegrationEvent('error', requestId, 'integration_approver_resolution_failed', {
+        itemId,
+        approverColumnId: input.approverColumnId,
+        errorCode: getErrorCode(error),
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 
   const config = boardConfig ?? await getBoardConfig(c.env.DB, boardId, accountId);
   const statusColumnId =
@@ -346,6 +394,7 @@ integrationsRoutes.post('/request-approval', async (c) => {
   if (!approverId) {
     logIntegrationEvent('error', requestId, 'integration_approver_missing', {
       normalizedInput: input,
+      attemptedApproverColumnId: input.approverColumnId,
     });
     return c.json(
       {
