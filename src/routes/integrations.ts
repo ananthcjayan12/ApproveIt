@@ -36,12 +36,21 @@ function parseString(value: unknown): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+function parseEntityId(value: unknown, nestedKeys: string[] = []): number | undefined {
+  const record = asRecord(value);
+
+  return firstDefined(
+    parsePositiveInt(value),
+    parsePositiveInt(record.id),
+    ...nestedKeys.map((key) => parsePositiveInt(record[key])),
+  );
+}
+
 function parseApprover(value: unknown): { id?: number; name?: string } {
   const record = asRecord(value);
 
   const directId = firstDefined(
-    parsePositiveInt(value),
-    parsePositiveInt(record.id),
+    parseEntityId(value, ['userId', 'user_id', 'personId', 'person_id']),
     parsePositiveInt(record.userId),
     parsePositiveInt(record.personId),
   );
@@ -80,18 +89,24 @@ function normalizeIntegrationInput(payload: Record<string, unknown>): {
   );
 
   return {
-    accountId: firstDefined(parsePositiveInt(inputRoot.accountId), parsePositiveInt(inputRoot.account_id)),
-    boardId: firstDefined(parsePositiveInt(inputRoot.boardId), parsePositiveInt(inputRoot.board_id)),
+    accountId: firstDefined(
+      parseEntityId(inputRoot.accountId, ['accountId', 'account_id']),
+      parseEntityId(inputRoot.account_id, ['accountId', 'account_id']),
+    ),
+    boardId: firstDefined(
+      parseEntityId(inputRoot.boardId, ['boardId', 'board_id']),
+      parseEntityId(inputRoot.board_id, ['boardId', 'board_id']),
+    ),
     itemId: firstDefined(
-      parsePositiveInt(inputRoot.itemId),
-      parsePositiveInt(inputRoot.item_id),
-      parsePositiveInt(inputRoot.pulseId),
+      parseEntityId(inputRoot.itemId, ['itemId', 'item_id', 'pulseId', 'pulse_id']),
+      parseEntityId(inputRoot.item_id, ['itemId', 'item_id', 'pulseId', 'pulse_id']),
+      parseEntityId(inputRoot.pulseId, ['itemId', 'item_id', 'pulseId', 'pulse_id']),
     ),
     requesterId: firstDefined(
-      parsePositiveInt(inputRoot.requesterId),
-      parsePositiveInt(inputRoot.requester_id),
-      parsePositiveInt(inputRoot.userId),
-      parsePositiveInt(inputRoot.triggeredByUserId),
+      parseEntityId(inputRoot.requesterId, ['requesterId', 'requester_id']),
+      parseEntityId(inputRoot.requester_id, ['requesterId', 'requester_id']),
+      parseEntityId(inputRoot.userId, ['userId', 'user_id']),
+      parseEntityId(inputRoot.triggeredByUserId, ['triggeredByUserId', 'triggered_by_user_id']),
     ),
     requesterName: firstDefined(
       parseString(inputRoot.requesterName),
@@ -131,16 +146,50 @@ function getErrorCode(error: unknown): string {
   return 'UNKNOWN_ERROR';
 }
 
+function logIntegrationEvent(
+  level: 'info' | 'warn' | 'error',
+  requestId: string,
+  event: string,
+  details: Record<string, unknown> = {},
+): void {
+  const entry = JSON.stringify({
+    level,
+    requestId,
+    event,
+    ...details,
+  });
+
+  if (level === 'error') {
+    console.error(entry);
+    return;
+  }
+
+  if (level === 'warn') {
+    console.warn(entry);
+    return;
+  }
+
+  console.log(entry);
+}
+
 integrationsRoutes.post('/request-approval', async (c) => {
+  const requestId = crypto.randomUUID();
   const signature = c.req.header('x-monday-signature');
   const authorizationHeader = c.req.header('authorization');
 
+  logIntegrationEvent('info', requestId, 'integration_request_started', {
+    hasSignatureHeader: Boolean(signature),
+    hasAuthorizationHeader: Boolean(authorizationHeader),
+  });
+
   if (!signature && !authorizationHeader) {
+    logIntegrationEvent('warn', requestId, 'integration_auth_missing_headers');
     return c.json(
       {
         error: {
           code: 'UNAUTHORIZED',
           message: 'Missing monday signature header.',
+          requestId,
         },
       },
       401,
@@ -163,11 +212,17 @@ integrationsRoutes.post('/request-approval', async (c) => {
     : false;
 
   if (!jwtClaims && !hasValidHmacSignature) {
+    logIntegrationEvent('warn', requestId, 'integration_auth_failed', {
+      hasSignatureHeader: Boolean(signature),
+      hasAuthorizationHeader: Boolean(authorizationHeader),
+      rawBodyLength: rawBody.length,
+    });
     return c.json(
       {
         error: {
           code: 'UNAUTHORIZED',
           message: 'Invalid monday signature.',
+          requestId,
         },
       },
       401,
@@ -179,11 +234,15 @@ integrationsRoutes.post('/request-approval', async (c) => {
   try {
     payload = JSON.parse(rawBody) as unknown;
   } catch {
+    logIntegrationEvent('error', requestId, 'integration_payload_parse_failed', {
+      rawBodyPreview: rawBody.slice(0, 500),
+    });
     return c.json(
       {
         error: {
           code: 'VALIDATION_ERROR',
           message: 'Payload must be valid JSON.',
+          requestId,
         },
       },
       400,
@@ -191,11 +250,15 @@ integrationsRoutes.post('/request-approval', async (c) => {
   }
 
   if (!payload || typeof payload !== 'object') {
+    logIntegrationEvent('error', requestId, 'integration_payload_not_object', {
+      payloadType: typeof payload,
+    });
     return c.json(
       {
         error: {
           code: 'VALIDATION_ERROR',
           message: 'Payload must be a JSON object.',
+          requestId,
         },
       },
       400,
@@ -204,15 +267,12 @@ integrationsRoutes.post('/request-approval', async (c) => {
 
   const rawPayload = payload as Record<string, unknown>;
   const input = normalizeIntegrationInput(rawPayload);
-  console.log(
-    JSON.stringify({
-      level: 'info',
-      event: 'integration_request_received',
-      authMode: jwtClaims ? 'jwt' : hasValidHmacSignature ? 'hmac' : 'none',
-      rawKeys: Object.keys(rawPayload),
-      normalizedInput: input,
-    }),
-  );
+  logIntegrationEvent('info', requestId, 'integration_request_received', {
+    authMode: jwtClaims ? 'jwt' : hasValidHmacSignature ? 'hmac' : 'none',
+    rawKeys: Object.keys(rawPayload),
+    jwtClaimKeys: jwtClaims ? Object.keys(jwtClaims) : [],
+    normalizedInput: input,
+  });
   const boardId = input.boardId;
   const boardConfig = boardId ? await getBoardConfigByBoardId(c.env.DB, boardId) : null;
   const accountId = input.accountId ?? parsePositiveInt(jwtClaims?.accountId) ?? boardConfig?.accountId;
@@ -221,20 +281,18 @@ integrationsRoutes.post('/request-approval', async (c) => {
   const requesterName = input.requesterName ?? 'Automation';
 
   if (!accountId || !boardId || !itemId) {
-    console.error(
-      JSON.stringify({
-        level: 'error',
-        event: 'integration_payload_validation_failed',
-        reason: 'missing_required_base_fields',
-        normalizedInput: input,
-        boardConfig,
-      }),
-    );
+    logIntegrationEvent('error', requestId, 'integration_payload_validation_failed', {
+      reason: 'missing_required_base_fields',
+      normalizedInput: input,
+      resolvedAccountId: accountId,
+      boardConfig,
+    });
     return c.json(
       {
         error: {
           code: 'VALIDATION_ERROR',
           message: 'accountId, boardId, and itemId are required.',
+          requestId,
         },
       },
       400,
@@ -243,11 +301,16 @@ integrationsRoutes.post('/request-approval', async (c) => {
 
   const usageLimit = await checkFreeTierLimit(c.env, accountId);
   if (!usageLimit.allowed) {
+    logIntegrationEvent('warn', requestId, 'integration_usage_limit_reached', {
+      accountId,
+      limit: usageLimit.limit,
+    });
     return c.json(
       {
         error: {
           code: 'FREE_TIER_LIMIT_REACHED',
           message: `Monthly limit reached (${usageLimit.limit}). Upgrade required to continue.`,
+          requestId,
         },
       },
       403,
@@ -255,7 +318,7 @@ integrationsRoutes.post('/request-approval', async (c) => {
   }
 
   const approverId = input.approverId;
-  const approverName = input.approverName ?? '';
+  const approverName = input.approverName ?? (approverId ? `User ${approverId}` : '');
 
   const config = boardConfig ?? await getBoardConfig(c.env.DB, boardId, accountId);
   const statusColumnId =
@@ -264,48 +327,86 @@ integrationsRoutes.post('/request-approval', async (c) => {
       : (config?.statusColumnId ?? '');
 
   if (!statusColumnId) {
+    logIntegrationEvent('error', requestId, 'integration_status_column_missing', {
+      normalizedInput: input,
+      boardConfig,
+    });
     return c.json(
       {
         error: {
           code: 'MISSING_STATUS_COLUMN',
           message: 'statusColumnId is missing in payload and board config.',
+          requestId,
         },
       },
       400,
     );
   }
 
-  if (!approverId || !approverName) {
+  if (!approverId) {
+    logIntegrationEvent('error', requestId, 'integration_approver_missing', {
+      normalizedInput: input,
+    });
     return c.json(
       {
         error: {
           code: 'MISSING_APPROVER',
-          message: 'Recipe payload must include approverId and approverName.',
+          message: 'Recipe payload must include approverId.',
+          requestId,
         },
       },
       400,
     );
   }
 
-  const result = await createApprovalRequest(c.env.DB, {
-    accountId,
-    boardId,
-    itemId,
-    requesterId,
-    requesterName,
-    approverId,
-    approverName,
-    statusColumnId,
-    note: input.note,
-  });
+  let result: Awaited<ReturnType<typeof createApprovalRequest>>;
+  try {
+    result = await createApprovalRequest(c.env.DB, {
+      accountId,
+      boardId,
+      itemId,
+      requesterId,
+      requesterName,
+      approverId,
+      approverName,
+      statusColumnId,
+      note: input.note,
+    });
+  } catch (error) {
+    logIntegrationEvent('error', requestId, 'integration_create_approval_threw', {
+      accountId,
+      boardId,
+      itemId,
+      approverId,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+    return c.json(
+      {
+        error: {
+          code: 'STORAGE_ERROR',
+          message: 'Unable to create approval request.',
+          requestId,
+        },
+      },
+      500,
+    );
+  }
 
   if (!result.ok && result.reason === 'duplicate_pending') {
+    logIntegrationEvent('warn', requestId, 'integration_duplicate_pending_approval', {
+      accountId,
+      boardId,
+      itemId,
+      approverId,
+      existingApprovalId: result.existingApprovalId,
+    });
     return c.json(
       {
         error: {
           code: 'DUPLICATE_PENDING_APPROVAL',
           message: 'A pending approval already exists for this item and approver.',
           details: [result.existingApprovalId],
+          requestId,
         },
       },
       409,
@@ -313,11 +414,19 @@ integrationsRoutes.post('/request-approval', async (c) => {
   }
 
   if (!result.ok) {
+    logIntegrationEvent('error', requestId, 'integration_create_approval_failed', {
+      accountId,
+      boardId,
+      itemId,
+      approverId,
+      result,
+    });
     return c.json(
       {
         error: {
           code: 'STORAGE_ERROR',
           message: 'Unable to create approval request.',
+          requestId,
         },
       },
       500,
@@ -330,16 +439,12 @@ integrationsRoutes.post('/request-approval', async (c) => {
     input.triggerStatusColumnId !== undefined && input.triggerStatusColumnId === statusColumnId;
 
   if (shouldSkipStatusSync) {
-    console.warn(
-      JSON.stringify({
-        level: 'warn',
-        event: 'integration_status_sync_skipped',
-        reason: 'trigger_and_tracking_columns_match',
-        boardId,
-        itemId,
-        statusColumnId,
-      }),
-    );
+    logIntegrationEvent('warn', requestId, 'integration_status_sync_skipped', {
+      reason: 'trigger_and_tracking_columns_match',
+      boardId,
+      itemId,
+      statusColumnId,
+    });
   } else {
     try {
       await updateMondayStatus(c.env, {
@@ -348,7 +453,19 @@ integrationsRoutes.post('/request-approval', async (c) => {
         statusColumnId,
         status: 'pending',
       });
+      logIntegrationEvent('info', requestId, 'integration_status_sync_succeeded', {
+        boardId,
+        itemId,
+        statusColumnId,
+      });
     } catch (error) {
+      logIntegrationEvent('error', requestId, 'integration_status_sync_failed', {
+        boardId,
+        itemId,
+        statusColumnId,
+        errorCode: getErrorCode(error),
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
       sideEffectFailures.push({ operation: 'updateMondayStatus', errorCode: getErrorCode(error) });
     }
   }
@@ -361,7 +478,17 @@ integrationsRoutes.post('/request-approval', async (c) => {
       requesterName,
       approverName,
     });
+    logIntegrationEvent('info', requestId, 'integration_notification_succeeded', {
+      recipientUserId: approverId,
+      itemId,
+    });
   } catch (error) {
+    logIntegrationEvent('error', requestId, 'integration_notification_failed', {
+      recipientUserId: approverId,
+      itemId,
+      errorCode: getErrorCode(error),
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
     sideEffectFailures.push({ operation: 'sendMondayNotification', errorCode: getErrorCode(error) });
   }
 
@@ -386,11 +513,18 @@ integrationsRoutes.post('/request-approval', async (c) => {
     });
   }
 
+  logIntegrationEvent('info', requestId, 'integration_request_completed', {
+    approvalId: result.approvalId,
+    status: result.status,
+    sideEffectFailures,
+  });
+
   return c.json(
     {
       data: {
         id: result.approvalId,
         status: result.status,
+        requestId,
       },
     },
     201,
